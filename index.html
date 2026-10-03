@@ -1,0 +1,376 @@
+<!doctype html>
+<html lang="ja">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>写真LorR</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+  </head>
+  <body class="min-h-screen bg-slate-100 text-slate-900">
+    <div class="mx-auto max-w-6xl px-4 py-6 md:py-8">
+      <header class="mb-6">
+        <h1 class="text-2xl font-bold md:text-3xl">写真LorR</h1>
+        <p class="mt-2 text-sm text-slate-600">
+          ディレクトリを選択し、←→キーで画像を左右の仕分け先へコピーします。
+        </p>
+        <div
+          id="protocolWarning"
+          class="mt-3 hidden rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-800"
+        ></div>
+      </header>
+
+      <section class="rounded-xl border border-slate-200 bg-white p-4 shadow-sm md:p-6">
+        <div class="grid grid-cols-1 gap-4 md:grid-cols-2">
+          <div class="md:col-span-2">
+            <button
+              id="pickDirBtn"
+              class="rounded-lg bg-sky-600 px-4 py-2 font-semibold text-white transition hover:bg-sky-500"
+              type="button"
+            >
+              元ディレクトリを選択
+            </button>
+            <p id="selectedDirLabel" class="mt-2 text-sm text-slate-600">未選択</p>
+          </div>
+
+          <label class="block">
+            <span class="mb-1 block text-sm font-medium">対象拡張子（カンマ区切り）</span>
+            <input
+              id="extensionsInput"
+              type="text"
+              class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+              value="png,jpg,jpeg,gif,bmp,webp,avif"
+            />
+          </label>
+
+          <div class="grid grid-cols-1 gap-3 md:grid-cols-2">
+            <div class="rounded-lg border border-slate-200 p-3">
+              <p class="mb-2 text-sm font-medium">左仕分け先ディレクトリ</p>
+              <button
+                id="pickLeftDirBtn"
+                class="rounded-lg bg-rose-600 px-3 py-2 text-sm font-semibold text-white transition hover:bg-rose-500"
+                type="button"
+              >
+                左仕分け先を選択
+              </button>
+              <p id="leftSelectedDirLabel" class="mt-2 text-sm text-slate-600">未選択</p>
+            </div>
+            <div class="rounded-lg border border-slate-200 p-3">
+              <p class="mb-2 text-sm font-medium">右仕分け先ディレクトリ</p>
+              <button
+                id="pickRightDirBtn"
+                class="rounded-lg bg-indigo-600 px-3 py-2 text-sm font-semibold text-white transition hover:bg-indigo-500"
+                type="button"
+              >
+                右仕分け先を選択
+              </button>
+              <p id="rightSelectedDirLabel" class="mt-2 text-sm text-slate-600">未選択</p>
+            </div>
+          </div>
+        </div>
+
+        <div class="mt-4 flex flex-wrap items-center gap-3">
+          <button
+            id="loadBtn"
+            class="rounded-lg bg-emerald-600 px-4 py-2 font-semibold text-white transition hover:bg-emerald-500"
+            type="button"
+          >
+            ファイルリストを読み込む
+          </button>
+          <span id="statusText" class="text-sm text-slate-700">準備中</span>
+        </div>
+      </section>
+
+      <section class="mt-6 rounded-xl border border-slate-200 bg-white p-4 shadow-sm md:p-6">
+        <div class="mb-4 grid grid-cols-2 gap-3 text-center text-sm md:text-base">
+          <div class="rounded-lg bg-rose-50 p-3">
+            <p class="text-slate-500">← 左仕分け先</p>
+            <p id="leftDirLabel" class="mt-1 break-words font-semibold text-rose-700">-</p>
+          </div>
+          <div class="rounded-lg bg-indigo-50 p-3">
+            <p class="text-slate-500">→ 右仕分け先</p>
+            <p id="rightDirLabel" class="mt-1 break-words font-semibold text-indigo-700">-</p>
+          </div>
+        </div>
+
+        <div class="mb-3 flex items-center justify-between gap-3 text-sm text-slate-700">
+          <p id="counterLabel">0 / 0</p>
+          <p id="fileNameLabel" class="truncate">-</p>
+        </div>
+
+        <div class="h-3 w-full overflow-hidden rounded-full bg-slate-200">
+          <div id="progressBar" class="h-full w-0 bg-sky-500 transition-all duration-150"></div>
+        </div>
+
+        <div class="mt-5 flex min-h-[320px] items-center justify-center rounded-xl border border-dashed border-slate-300 bg-slate-50 p-3">
+          <img
+            id="previewImage"
+            alt="preview"
+            class="max-h-[65vh] w-auto max-w-full rounded-lg object-contain"
+          />
+          <p id="emptyPreviewText" class="text-center text-sm text-slate-500">
+            読み込み後、ここに画像が表示されます。
+          </p>
+        </div>
+
+        <p class="mt-4 text-xs text-slate-500">
+          操作: 左矢印で左仕分け先へコピー / 右矢印で右仕分け先へコピー
+        </p>
+      </section>
+    </div>
+
+    <script>
+      const state = {
+        sourceDirHandle: null,
+        leftDestDirHandle: null,
+        rightDestDirHandle: null,
+        files: [],
+        currentIndex: 0,
+        busy: false,
+        currentImageUrl: null,
+      };
+
+      const pickDirBtn = document.getElementById('pickDirBtn');
+      const pickLeftDirBtn = document.getElementById('pickLeftDirBtn');
+      const pickRightDirBtn = document.getElementById('pickRightDirBtn');
+      const protocolWarning = document.getElementById('protocolWarning');
+      const selectedDirLabel = document.getElementById('selectedDirLabel');
+      const leftSelectedDirLabel = document.getElementById('leftSelectedDirLabel');
+      const rightSelectedDirLabel = document.getElementById('rightSelectedDirLabel');
+      const extensionsInput = document.getElementById('extensionsInput');
+      const loadBtn = document.getElementById('loadBtn');
+      const statusText = document.getElementById('statusText');
+      const leftDirLabel = document.getElementById('leftDirLabel');
+      const rightDirLabel = document.getElementById('rightDirLabel');
+      const counterLabel = document.getElementById('counterLabel');
+      const fileNameLabel = document.getElementById('fileNameLabel');
+      const progressBar = document.getElementById('progressBar');
+      const previewImage = document.getElementById('previewImage');
+      const emptyPreviewText = document.getElementById('emptyPreviewText');
+
+      function setStatus(message, isError = false) {
+        statusText.textContent = message;
+        statusText.className = isError ? 'text-sm text-red-600' : 'text-sm text-slate-700';
+      }
+
+      function parseExtensions(inputText) {
+        return inputText
+          .split(',')
+          .map((s) => s.trim().toLowerCase().replace(/^\./, ''))
+          .filter((s) => s.length > 0);
+      }
+
+      function fileExt(name) {
+        const i = name.lastIndexOf('.');
+        if (i < 0 || i === name.length - 1) return '';
+        return name.slice(i + 1).toLowerCase();
+      }
+
+      function resetCurrentImage() {
+        if (state.currentImageUrl) {
+          URL.revokeObjectURL(state.currentImageUrl);
+          state.currentImageUrl = null;
+        }
+      }
+
+      function updateProgress() {
+        const total = state.files.length;
+        const currentDisplay = total === 0 ? 0 : Math.min(state.currentIndex + 1, total);
+        counterLabel.textContent = `${currentDisplay} / ${total}`;
+
+        const processed = Math.min(state.currentIndex, total);
+        const percent = total === 0 ? 0 : Math.round((processed / total) * 100);
+        progressBar.style.width = `${percent}%`;
+      }
+
+      async function showCurrentFile() {
+        resetCurrentImage();
+
+        if (state.files.length === 0) {
+          previewImage.removeAttribute('src');
+          previewImage.classList.add('hidden');
+          emptyPreviewText.classList.remove('hidden');
+          fileNameLabel.textContent = '-';
+          updateProgress();
+          return;
+        }
+
+        if (state.currentIndex >= state.files.length) {
+          previewImage.removeAttribute('src');
+          previewImage.classList.add('hidden');
+          emptyPreviewText.classList.remove('hidden');
+          fileNameLabel.textContent = '完了';
+          updateProgress();
+          setStatus('すべてのファイルの仕分けが完了しました。');
+          return;
+        }
+
+        const handle = state.files[state.currentIndex];
+        const file = await handle.getFile();
+        state.currentImageUrl = URL.createObjectURL(file);
+        previewImage.src = state.currentImageUrl;
+        previewImage.classList.remove('hidden');
+        emptyPreviewText.classList.add('hidden');
+        fileNameLabel.textContent = handle.name;
+        updateProgress();
+      }
+
+      async function copyFileToDestination(fileHandle, destinationDirHandle) {
+        const file = await fileHandle.getFile();
+        const destHandle = await destinationDirHandle.getFileHandle(fileHandle.name, { create: true });
+        const writable = await destHandle.createWritable();
+        await writable.write(file);
+        await writable.close();
+      }
+
+      async function handleSort(direction) {
+        if (state.busy) return;
+        if (state.currentIndex >= state.files.length) return;
+
+        state.busy = true;
+        const current = state.files[state.currentIndex];
+
+        try {
+          if (direction === 'left') {
+            await copyFileToDestination(current, state.leftDestDirHandle);
+          } else {
+            await copyFileToDestination(current, state.rightDestDirHandle);
+          }
+
+          state.currentIndex += 1;
+          await showCurrentFile();
+        } catch (err) {
+          console.error(err);
+          setStatus(`コピー中にエラーが発生しました: ${err.message}`, true);
+        } finally {
+          state.busy = false;
+        }
+      }
+
+      pickDirBtn.addEventListener('click', async () => {
+        if (!window.showDirectoryPicker) {
+          setStatus('このブラウザは Directory Picker に対応していません。Chrome / Edge を使用してください。', true);
+          return;
+        }
+
+        try {
+          state.sourceDirHandle = await window.showDirectoryPicker();
+          selectedDirLabel.textContent = `選択中: ${state.sourceDirHandle.name}`;
+          setStatus('元ディレクトリを選択しました。');
+        } catch (err) {
+          if (err.name !== 'AbortError') {
+            setStatus(`ディレクトリ選択に失敗しました: ${err.message}`, true);
+          }
+        }
+      });
+
+      pickLeftDirBtn.addEventListener('click', async () => {
+        if (!window.showDirectoryPicker) {
+          setStatus('このブラウザは Directory Picker に対応していません。Chrome / Edge を使用してください。', true);
+          return;
+        }
+
+        try {
+          state.leftDestDirHandle = await window.showDirectoryPicker();
+          leftSelectedDirLabel.textContent = `選択中: ${state.leftDestDirHandle.name}`;
+          leftDirLabel.textContent = state.leftDestDirHandle.name;
+          setStatus('左仕分け先を選択しました。');
+        } catch (err) {
+          if (err.name !== 'AbortError') {
+            setStatus(`左仕分け先の選択に失敗しました: ${err.message}`, true);
+          }
+        }
+      });
+
+      pickRightDirBtn.addEventListener('click', async () => {
+        if (!window.showDirectoryPicker) {
+          setStatus('このブラウザは Directory Picker に対応していません。Chrome / Edge を使用してください。', true);
+          return;
+        }
+
+        try {
+          state.rightDestDirHandle = await window.showDirectoryPicker();
+          rightSelectedDirLabel.textContent = `選択中: ${state.rightDestDirHandle.name}`;
+          rightDirLabel.textContent = state.rightDestDirHandle.name;
+          setStatus('右仕分け先を選択しました。');
+        } catch (err) {
+          if (err.name !== 'AbortError') {
+            setStatus(`右仕分け先の選択に失敗しました: ${err.message}`, true);
+          }
+        }
+      });
+
+      loadBtn.addEventListener('click', async () => {
+        if (!state.sourceDirHandle) {
+          setStatus('先に元ディレクトリを選択してください。', true);
+          return;
+        }
+        if (!state.leftDestDirHandle || !state.rightDestDirHandle) {
+          setStatus('左右の仕分け先ディレクトリを先に選択してください。', true);
+          return;
+        }
+
+        const extensions = parseExtensions(extensionsInput.value);
+
+        if (extensions.length === 0) {
+          setStatus('拡張子を1つ以上指定してください。', true);
+          return;
+        }
+        if (state.leftDestDirHandle === state.rightDestDirHandle) {
+          setStatus('左右の仕分け先は別のディレクトリを選択してください。', true);
+          return;
+        }
+
+        try {
+          setStatus('ファイル一覧を読み込み中...');
+
+          const list = [];
+          for await (const entry of state.sourceDirHandle.values()) {
+            if (entry.kind !== 'file') continue;
+            const ext = fileExt(entry.name);
+            if (extensions.includes(ext)) {
+              list.push(entry);
+            }
+          }
+
+          list.sort((a, b) => a.name.localeCompare(b.name, 'ja'));
+          state.files = list;
+          state.currentIndex = 0;
+
+          if (state.files.length === 0) {
+            setStatus('該当する拡張子のファイルが見つかりませんでした。');
+          } else {
+            setStatus(`読み込み完了: ${state.files.length} 件`);
+          }
+
+          await showCurrentFile();
+        } catch (err) {
+          console.error(err);
+          setStatus(`読み込み中にエラーが発生しました: ${err.message}`, true);
+        }
+      });
+
+      window.addEventListener('keydown', async (e) => {
+        if (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') {
+          return;
+        }
+
+        if (state.files.length === 0 || state.currentIndex >= state.files.length) {
+          return;
+        }
+
+        e.preventDefault();
+        const direction = e.key === 'ArrowLeft' ? 'left' : 'right';
+        await handleSort(direction);
+      });
+
+      if (location.protocol === 'file:') {
+        protocolWarning.textContent =
+          'file:// 直開きではブラウザ制約により動作しません。ターミナルで "python3 -m http.server 8080" を実行し、http://localhost:8080/index.html を開いてください。';
+        protocolWarning.classList.remove('hidden');
+        setStatus('file:// では実行できません。http://localhost:8080 で開いてください。', true);
+      }
+
+      updateProgress();
+    </script>
+  </body>
+</html>
