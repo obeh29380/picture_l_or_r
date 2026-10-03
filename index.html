@@ -113,7 +113,7 @@
         </div>
 
         <p class="mt-4 text-xs text-slate-500">
-          操作: 左矢印で左仕分け先へコピー / 右矢印で右仕分け先へコピー
+          操作: 左矢印で左仕分け先へコピー / 右矢印で右仕分け先へコピー / Spaceでスキップ
         </p>
       </section>
     </div>
@@ -246,6 +246,16 @@
         }
       }
 
+      async function handleSkip() {
+        if (state.busy) return;
+        if (state.currentIndex >= state.files.length) return;
+
+        const current = state.files[state.currentIndex];
+        state.currentIndex += 1;
+        setStatus(`スキップ: ${current.name}`);
+        await showCurrentFile();
+      }
+
       pickDirBtn.addEventListener('click', async () => {
         if (!window.showDirectoryPicker) {
           setStatus('このブラウザは Directory Picker に対応していません。Chrome / Edge を使用してください。', true);
@@ -350,7 +360,10 @@
       });
 
       window.addEventListener('keydown', async (e) => {
-        if (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') {
+        const isArrow = e.key === 'ArrowLeft' || e.key === 'ArrowRight';
+        const isSpace = e.code === 'Space' || e.key === ' ' || e.key === 'Spacebar';
+
+        if (!isArrow && !isSpace) {
           return;
         }
 
@@ -359,6 +372,11 @@
         }
 
         e.preventDefault();
+        if (isSpace) {
+          await handleSkip();
+          return;
+        }
+
         const direction = e.key === 'ArrowLeft' ? 'left' : 'right';
         await handleSort(direction);
       });
